@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Time.is clock</title>
+    <link rel="stylesheet" href="https://public.codepenassets.com/css/normalize-5.0.0.min.css" />
+
+    <style>
+      html,
+      body {
+        height: 100%;
+        font-family: monospace;
+        font-weight: bold;
+        font-size: 72px;
+        -webkit-text-stroke: 0.075rem #2c313c;
+        background: #000;
+        color: #fff;
+      }
+
+      .flex-container {
+        height: 100%;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .row {
+        width: auto;
+      }
+
+      .flex-item {
+        width: auto;
+        height: auto;
+        line-height: 1;
+      }
+
+      #date {
+        font-size: 2rem;
+        text-align: center;
+      }
+
+      #time {
+        font-size: 5rem;
+        text-align: left;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="flex-container">
+      <div class="row">
+        <div class="flex-item" id="time">
+          <a
+            href="https://time.is/Oslo"
+            id="time_is_link"
+            rel="nofollow"
+            style="font-size: 36px"
+          ></a>
+          <span id="Oslo_z71e"></span>
+          <script src="//widget.time.is/t.js"></script>
+          <script>
+            time_is_widget.init({ Oslo_z71e: {} })
+          </script>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
