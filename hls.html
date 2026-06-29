@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HLS Multi-Rendition Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.16/dist/hls.min.js"></script>
+    <style>
+      :root {
+        --bg: #0d0f12;
+        --panel: #16191d;
+        --border: #2a2e35;
+        --text: #e6e8eb;
+        --muted: #8b9099;
+        --accent: #4fc3f7;
+        --ok: #4caf50;
+        --warn: #e0a956;
+        --err: #e05656;
+        --fs-base: 1rem;
+        --fs-heading: 1.5rem;
+        --fs-ui: 0.9rem;
+        --fs-tile: 1rem;
+        --fs-mono: 0.9rem;
+        --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+        --radius-sm: 6px;
+        --radius: 8px;
+        --radius-lg: 10px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: var(--fs-base);
+        line-height: 1.4;
+        padding: 20px;
+      }
+      h1 {
+        font-size: var(--fs-heading);
+        margin: 0 0 4px;
+      }
+      .subtitle {
+        color: var(--muted);
+        font-size: var(--fs-ui);
+        margin-bottom: 16px;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 16px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+      }
+      .controls input[type='text'] {
+        flex: 1;
+        min-width: 260px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px 10px;
+        border-radius: var(--radius-sm);
+        font-size: var(--fs-ui);
+        font-family: var(--font-mono);
+      }
+      button {
+        background: var(--accent);
+        color: #001018;
+        border: none;
+        padding: 8px 14px;
+        border-radius: var(--radius-sm);
+        font-size: var(--fs-ui);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: var(--border);
+        color: var(--text);
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+      label.chk {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--fs-ui);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 14px;
+        align-items: start;
+      }
+      .tile {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+      .tile video {
+        width: 100%;
+        aspect-ratio: 16/9;
+        background: #000;
+        display: block;
+      }
+      .tile-info {
+        padding: 8px 10px;
+        font-size: var(--fs-tile);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      .tile-info .res {
+        font-weight: 600;
+        color: var(--text);
+      }
+      .tile-info .meta,
+      .segment-info,
+      .diag-toggle,
+      .diag-panel {
+        font-family: var(--font-mono);
+        font-size: var(--fs-mono);
+        color: var(--muted);
+      }
+      .tile-info .meta {
+        text-align: right;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+        flex-shrink: 0;
+      }
+      .status-dot.ok {
+        background: var(--ok);
+      }
+      .status-dot.err {
+        background: var(--err);
+      }
+      .error-msg {
+        padding: 8px 10px;
+        font-size: var(--fs-mono);
+        color: var(--err);
+        border-top: 1px solid var(--border);
+        display: none;
+        word-break: break-word;
+      }
+      .segment-info {
+        padding: 6px 10px 8px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .tile-info .tc {
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: var(--fs-mono);
+      }
+      .segment-info .seq {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .segment-info .seg-url {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        direction: rtl;
+        text-align: left;
+        flex: 1;
+      }
+      .segment-info .left-group {
+        display: flex;
+        gap: 10px;
+        flex-shrink: 0;
+      }
+      .global-error {
+        background: #2a1414;
+        border: 1px solid #5c2626;
+        color: #ffb3b3;
+        padding: 10px 12px;
+        border-radius: var(--radius);
+        font-size: var(--fs-ui);
+        margin-bottom: 16px;
+        display: none;
+      }
+      .diag-toggle {
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: none;
+        border-top: 1px solid var(--border);
+        padding: 6px 10px;
+        cursor: pointer;
+        border-radius: 0;
+      }
+      .diag-toggle:hover {
+        background: rgba(255, 255, 255, 0.03);
+        opacity: 1;
+        color: var(--text);
+      }
+      .diag-panel {
+        display: none;
+        border-top: 1px solid var(--border);
+        padding: 8px 10px 10px;
+      }
+      .diag-panel.open {
+        display: block;
+      }
+      .diag-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 2px 0;
+      }
+      .diag-row .k {
+        color: var(--muted);
+      }
+      .diag-row .v {
+        color: var(--text);
+        text-align: right;
+      }
+      .diag-row .v.warn {
+        color: var(--warn);
+      }
+      .diag-row .v.bad {
+        color: var(--err);
+      }
+      .diag-section-title {
+        color: var(--accent);
+        margin: 8px 0 2px;
+        font-weight: 600;
+      }
+      .diag-section-title:first-child {
+        margin-top: 0;
+      }
+      .diag-log {
+        max-height: 90px;
+        overflow-y: auto;
+        margin-top: 2px;
+        border-top: 1px dashed var(--border);
+        padding-top: 4px;
+      }
+      .diag-log-entry {
+        padding: 1px 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .diag-log-entry.fatal {
+        color: var(--err);
+      }
+      .diag-log-entry.warn {
+        color: var(--warn);
+      }
+      .diag-controls-row {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 4px;
+      }
+      .diag-controls-row button {
+        padding: 4px 8px;
+        font-size: var(--fs-mono);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>HLS Multi-Rendition Viewer</h1>
+    <div class="subtitle">
+      Loads a master manifest and plays every variant rendition simultaneously, each pinned to its
+      own quality level (no ABR switching).
+    </div>
+
+    <div class="global-error" id="globalError"></div>
+
+    <div class="controls">
+      <input type="text" id="manifestUrl" placeholder="https://.../master.m3u8" value="" />
+      <label class="chk"><input type="checkbox" id="muteAll" checked /> Mute all</label>
+      <button class="secondary" id="syncBtn">Sync play all</button>
+      <button class="secondary" id="pauseBtn">Pause all</button>
+      <span class="chk" id="syncStatus" style="font-family: var(--font-mono)"></span>
+      <button id="loadBtn">Load</button>
+    </div>
+
+    <div class="controls">
+      <label class="chk" for="seekTimecode">Go to timecode</label>
+      <input
+        type="text"
+        id="seekTimecode"
+        placeholder="MM:SS or HH:MM:SS"
+        style="flex: 0 0 160px; min-width: 0"
+      />
+      <button class="secondary" id="seekTimecodeBtn">Go</button>
+      <label class="chk" for="seekSegment" style="margin-left: 8px">Go to segment #</label>
+      <input
+        type="text"
+        id="seekSegment"
+        placeholder="e.g. 1842"
+        style="flex: 0 0 120px; min-width: 0"
+      />
+      <button class="secondary" id="seekSegmentBtn">Go</button>
+      <span class="chk" id="seekStatus" style="font-family: var(--font-mono)"></span>
+      <button class="secondary" id="diagToggleAllBtn" style="margin-left: auto">
+        Collapse all diagnostics
+      </button>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <script>
+      const grid = document.getElementById('grid')
+      const globalError = document.getElementById('globalError')
+      const muteAllChk = document.getElementById('muteAll')
+      const syncStatus = document.getElementById('syncStatus')
+      const pauseBtn = document.getElementById('pauseBtn')
+      let hlsInstances = []
+      let currentSeqNums = [] // parallel array of latest frag.sn per tile
+      let tileVideosAndDiags = [] // parallel array of { video, diag } per tile, for periodic polling
+      let allPaused = false
+
+      function showGlobalError(msg) {
+        globalError.style.display = 'block'
+        globalError.textContent = msg
+      }
+      function clearGlobalError() {
+        globalError.style.display = 'none'
+        globalError.innerHTML = ''
+      }
+
+      // Update the browser URL bar with ?url=… without percent-encoding
+      // forward slashes or colons, so the URL stays human-readable.
+      function setUrlParam(url) {
+        const encoded = encodeURIComponent(url).replace(/%2F/g, '/').replace(/%3A/g, ':')
+        history.replaceState(null, '', '?url=' + encoded)
+      }
+
+      function destroyAll() {
+        hlsInstances.forEach(h => {
+          try {
+            h.destroy()
+          } catch (e) {}
+        })
+        hlsInstances = []
+        currentSeqNums = []
+        tileVideosAndDiags = []
+        grid.innerHTML = ''
+        allPaused = false
+        pauseBtn.textContent = 'Pause all'
+        if (typeof seekStatus !== 'undefined') seekStatus.textContent = ''
+      }
+
+      function fmtBitrate(bps) {
+        if (!bps) return ''
+        return (bps / 1000000).toFixed(2) + ' Mbps'
+      }
+
+      function pad2(n) {
+        return n < 10 ? '0' + n : '' + n
+      }
+
+      // Zero-padded HH:MM:SS so the displayed width never jitters as digits change.
+      function formatTimecode(seconds) {
+        if (!isFinite(seconds) || seconds < 0) seconds = 0
+        const h = Math.floor(seconds / 3600)
+        const m = Math.floor((seconds % 3600) / 60)
+        const s = Math.floor(seconds % 60)
+        return `${pad2(h)}:${pad2(m)}:${pad2(s)}`
+      }
+
+      function buildTile(level, index) {
+        const tile = document.createElement('div')
+        tile.className = 'tile'
+        tile.style.position = 'relative'
+
+        const video = document.createElement('video')
+        video.muted = muteAllChk.checked
+        video.playsInline = true
+        video.controls = true
+        video.autoplay = true
+
+        const bufferingBadge = document.createElement('div')
+        bufferingBadge.textContent = 'buffering…'
+        bufferingBadge.style.position = 'absolute'
+        bufferingBadge.style.top = '8px'
+        bufferingBadge.style.left = '8px'
+        bufferingBadge.style.background = 'rgba(0,0,0,0.7)'
+        bufferingBadge.style.color = '#fff'
+        bufferingBadge.style.fontSize = '0.6875rem'
+        bufferingBadge.style.padding = '2px 8px'
+        bufferingBadge.style.borderRadius = '4px'
+        bufferingBadge.style.display = 'none'
+        bufferingBadge.style.pointerEvents = 'none'
+
+        video.addEventListener('waiting', () => {
+          bufferingBadge.style.display = 'block'
+        })
+        video.addEventListener('playing', () => {
+          bufferingBadge.style.display = 'none'
+        })
+        video.addEventListener('seeking', () => {
+          bufferingBadge.style.display = 'block'
+        })
+        video.addEventListener('seeked', () => {
+          bufferingBadge.style.display = 'none'
+        })
+
+        const info = document.createElement('div')
+        info.className = 'tile-info'
+
+        const left = document.createElement('div')
+        const dot = document.createElement('span')
+        dot.className = 'status-dot'
+        const resLabel = document.createElement('span')
+        resLabel.className = 'res'
+        resLabel.textContent =
+          level.width && level.height ? `${level.width}x${level.height}` : `Level ${index}`
+        left.appendChild(dot)
+        left.appendChild(document.createTextNode(' '))
+        left.appendChild(resLabel)
+
+        const tcSpan = document.createElement('span')
+        tcSpan.className = 'tc'
+        tcSpan.textContent = '00:00:00'
+
+        const meta = document.createElement('div')
+        meta.className = 'meta'
+        meta.textContent = fmtBitrate(level.bitrate)
+
+        info.appendChild(left)
+        info.appendChild(tcSpan)
+        info.appendChild(meta)
+
+        const errBox = document.createElement('div')
+        errBox.className = 'error-msg'
+
+        const segInfo = document.createElement('div')
+        segInfo.className = 'segment-info'
+
+        const leftGroup = document.createElement('div')
+        leftGroup.className = 'left-group'
+
+        const seqSpan = document.createElement('span')
+        seqSpan.className = 'seq'
+        seqSpan.textContent = '–'
+
+        leftGroup.appendChild(seqSpan)
+
+        const segUrlSpan = document.createElement('span')
+        segUrlSpan.className = 'seg-url'
+        segUrlSpan.textContent = ''
+
+        segInfo.appendChild(leftGroup)
+        segInfo.appendChild(segUrlSpan)
+
+        // --- Diagnostics panel (open by default) ---
+        const diagToggle = document.createElement('button')
+        diagToggle.className = 'diag-toggle'
+        diagToggle.textContent = 'Diagnostics ▴'
+
+        const diagPanel = document.createElement('div')
+        diagPanel.className = 'diag-panel open'
+
+        diagToggle.addEventListener('click', () => {
+          const open = diagPanel.classList.toggle('open')
+          diagToggle.textContent = open ? 'Diagnostics ▴' : 'Diagnostics ▾'
+          // Keep the global expand/collapse toggle in sync with individual panels.
+          // If any individual panel is closed, the global state is considered collapsed.
+          diagAllExpanded = Array.from(document.querySelectorAll('.diag-panel')).every(p =>
+            p.classList.contains('open')
+          )
+          const globalBtn = document.getElementById('diagToggleAllBtn')
+          globalBtn.textContent = diagAllExpanded
+            ? 'Collapse all diagnostics'
+            : 'Expand all diagnostics'
+        })
+
+        // Playlist health section
+        const diagPlaylistTitle = document.createElement('div')
+        diagPlaylistTitle.className = 'diag-section-title'
+        diagPlaylistTitle.textContent = 'Playlist'
+        const rowLive = makeDiagRow('Type')
+        const rowVideoCodec = makeDiagRow('Video codec')
+        const rowTarget = makeDiagRow('Target duration')
+        const rowWindow = makeDiagRow('Segments in window')
+        const rowTotalDur = makeDiagRow('Window duration')
+        const rowLatency = makeDiagRow('Latency')
+        const rowPlaylistLoad = makeDiagRow('Playlist load')
+        const rowBwEstimate = makeDiagRow('BW estimate')
+
+        // Audio section
+        const diagAudioTitle = document.createElement('div')
+        diagAudioTitle.className = 'diag-section-title'
+        diagAudioTitle.textContent = 'Audio'
+        const rowAudioCodec = makeDiagRow('Audio codec')
+        const rowAudioTrack = makeDiagRow('Audio track')
+
+        // Buffer health section
+        const diagBufferTitle = document.createElement('div')
+        diagBufferTitle.className = 'diag-section-title'
+        diagBufferTitle.textContent = 'Buffer'
+        const rowBufAhead = makeDiagRow('Buffered ahead')
+        const rowDroppedFrames = makeDiagRow('Dropped frames')
+        const rowFpsDrops = makeDiagRow('FPS drops detected')
+        const rowStallsRecovered = makeDiagRow('Stalls recovered')
+
+        // Last fragment load section
+        const diagFragTitle = document.createElement('div')
+        diagFragTitle.className = 'diag-section-title'
+        diagFragTitle.textContent = 'Last segment load'
+        const rowFragLoad = makeDiagRow('Download time')
+        const rowFragParse = makeDiagRow('Parse time')
+        const rowFragBuffer = makeDiagRow('Buffer-append time')
+        const rowFragThroughput = makeDiagRow('Throughput')
+        const rowFragRetries = makeDiagRow('Retries')
+        const rowFragCount = makeDiagRow('Fragments loaded')
+
+        // Video element section
+        const diagVideoTitle = document.createElement('div')
+        diagVideoTitle.className = 'diag-section-title'
+        diagVideoTitle.textContent = 'Video element'
+        const rowDisplayRes = makeDiagRow('Display res')
+        const rowFrameDelay = makeDiagRow('Frame delay')
+
+        // Error log section
+        const diagErrTitle = document.createElement('div')
+        diagErrTitle.className = 'diag-section-title'
+        diagErrTitle.textContent = 'Errors (0)'
+        const diagLog = document.createElement('div')
+        diagLog.className = 'diag-log'
+
+        diagPanel.appendChild(diagPlaylistTitle)
+        diagPanel.appendChild(rowLive.row)
+        diagPanel.appendChild(rowVideoCodec.row)
+        diagPanel.appendChild(rowTarget.row)
+        diagPanel.appendChild(rowWindow.row)
+        diagPanel.appendChild(rowTotalDur.row)
+        diagPanel.appendChild(rowLatency.row)
+        diagPanel.appendChild(rowPlaylistLoad.row)
+        diagPanel.appendChild(rowBwEstimate.row)
+        diagPanel.appendChild(diagAudioTitle)
+        diagPanel.appendChild(rowAudioCodec.row)
+        diagPanel.appendChild(rowAudioTrack.row)
+        diagPanel.appendChild(diagBufferTitle)
+        diagPanel.appendChild(rowBufAhead.row)
+        diagPanel.appendChild(rowDroppedFrames.row)
+        diagPanel.appendChild(rowFpsDrops.row)
+        diagPanel.appendChild(rowStallsRecovered.row)
+        diagPanel.appendChild(diagFragTitle)
+        diagPanel.appendChild(rowFragLoad.row)
+        diagPanel.appendChild(rowFragParse.row)
+        diagPanel.appendChild(rowFragBuffer.row)
+        diagPanel.appendChild(rowFragThroughput.row)
+        diagPanel.appendChild(rowFragRetries.row)
+        diagPanel.appendChild(rowFragCount.row)
+        diagPanel.appendChild(diagVideoTitle)
+        diagPanel.appendChild(rowDisplayRes.row)
+        diagPanel.appendChild(rowFrameDelay.row)
+        diagPanel.appendChild(diagErrTitle)
+        diagPanel.appendChild(diagLog)
+
+        tile.appendChild(video)
+        tile.appendChild(bufferingBadge)
+        tile.appendChild(info)
+        tile.appendChild(segInfo)
+        tile.appendChild(errBox)
+        tile.appendChild(diagToggle)
+        tile.appendChild(diagPanel)
+        grid.appendChild(tile)
+
+        // Keep the displayed timecode and buffered-ahead readout updating
+        // continuously as this tile's video plays.
+        video.addEventListener('timeupdate', () => {
+          tcSpan.textContent = formatTimecode(video.currentTime)
+          const buf = video.buffered
+          let ahead = 0
+          for (let i = 0; i < buf.length; i++) {
+            if (video.currentTime >= buf.start(i) && video.currentTime <= buf.end(i)) {
+              ahead = buf.end(i) - video.currentTime
+              break
+            }
+          }
+          setDiagValue(
+            rowBufAhead,
+            ahead.toFixed(1) + 's',
+            ahead < 3 ? 'bad' : ahead < 8 ? 'warn' : ''
+          )
+        })
+
+        return {
+          video,
+          dot,
+          errBox,
+          seqSpan,
+          segUrlSpan,
+          tcSpan,
+          diag: {
+            rowLive,
+            rowVideoCodec,
+            rowTarget,
+            rowWindow,
+            rowTotalDur,
+            rowLatency,
+            rowPlaylistLoad,
+            rowBwEstimate,
+            rowAudioCodec,
+            rowAudioTrack,
+            rowBufAhead,
+            rowDroppedFrames,
+            rowFpsDrops,
+            rowStallsRecovered,
+            rowFragLoad,
+            rowFragParse,
+            rowFragBuffer,
+            rowFragThroughput,
+            rowFragRetries,
+            rowFragCount,
+            rowDisplayRes,
+            rowFrameDelay,
+            diagErrTitle,
+            diagLog,
+            errorCount: { fatal: 0, warn: 0 },
+            stallCount: 0,
+            fragCount: 0,
+            fpsDropCount: 0,
+          },
+        }
+      }
+
+      // Helper to build a label/value diagnostics row; returns refs for updating later.
+      function makeDiagRow(label) {
+        const row = document.createElement('div')
+        row.className = 'diag-row'
+        const k = document.createElement('span')
+        k.className = 'k'
+        k.textContent = label
+        const v = document.createElement('span')
+        v.className = 'v'
+        v.textContent = '–'
+        row.appendChild(k)
+        row.appendChild(v)
+        return { row, k, v }
+      }
+
+      function setDiagValue(rowRef, text, statusClass) {
+        rowRef.v.textContent = text
+        rowRef.v.classList.remove('warn', 'bad')
+        if (statusClass) rowRef.v.classList.add(statusClass)
+      }
+
+      function loadManifest(url) {
+        destroyAll()
+        clearGlobalError()
+
+        if (!window.Hls) {
+          showGlobalError(
+            'hls.js failed to load from the CDN (script tag did not execute — check the browser console / Network tab for a 404 or blocked request on hls.min.js, or an ad-blocker/extension interfering). This is not the same as MSE being unsupported.'
+          )
+          return
+        }
+        if (!window.Hls.isSupported()) {
+          showGlobalError(
+            'hls.js loaded, but reports MediaSource Extensions (MSE) are not supported in this browser/context.'
+          )
+          return
+        }
+
+        // First, probe the master manifest with one hidden Hls instance to read levels.
+        const probe = new Hls({ enableWorker: true })
+        const probeVideo = document.createElement('video')
+
+        probe.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          const levels = data.levels
+          if (!levels || !levels.length) {
+            showGlobalError('No renditions found in this manifest.')
+            probe.destroy()
+            return
+          }
+
+          // Sort high to low by height for nicer layout
+          const ordered = levels
+            .map((lvl, i) => ({ lvl, i }))
+            .sort((a, b) => (b.lvl.height || 0) - (a.lvl.height || 0))
+
+          ordered.forEach(({ lvl, i }, pos) => {
+            const { video, dot, errBox, seqSpan, segUrlSpan, tcSpan, diag } = buildTile(lvl, i)
+            const playerHls = new Hls({ enableWorker: true, autoStartLoad: true })
+            tileVideosAndDiags.push({ video, diag, hls: playerHls })
+            hlsInstances.push(playerHls)
+
+            playerHls.loadSource(url)
+            playerHls.attachMedia(video)
+
+            playerHls.on(Hls.Events.MANIFEST_PARSED, () => {
+              // Lock to this exact level only, disable auto level switching
+              playerHls.autoLevelEnabled = false
+              playerHls.currentLevel = i
+              playerHls.loadLevel = i
+              video.play().catch(() => {})
+            })
+
+            playerHls.on(Hls.Events.LEVEL_SWITCHED, (e, d) => {
+              dot.classList.add('ok')
+              dot.classList.remove('err')
+            })
+
+            playerHls.on(Hls.Events.FRAG_CHANGED, (e, data) => {
+              const frag = data.frag
+              if (!frag) return
+              seqSpan.textContent = `#${frag.sn}`
+              const fname = (frag.relurl || frag.url || '').split('/').pop()
+              segUrlSpan.textContent = `${fname} · ${frag.duration.toFixed(2)}s`
+              segUrlSpan.title = frag.url || ''
+              currentSeqNums[pos] = frag.sn
+            })
+
+            // Playlist load timing: record start on LEVEL_LOADING, show delta on LEVEL_LOADED.
+            let playlistLoadStart = 0
+            playerHls.on(Hls.Events.LEVEL_LOADING, () => {
+              playlistLoadStart = performance.now()
+            })
+            playerHls.on(Hls.Events.LEVEL_LOADED, (e, data) => {
+              const d = data.details
+              const lvl = playerHls.levels[playerHls.currentLevel]
+              if (!d) return
+              setDiagValue(diag.rowLive, d.live ? 'Live' : 'VOD')
+              setDiagValue(diag.rowVideoCodec, lvl ? lvl.videoCodec || lvl.codecs || '–' : '–')
+              setDiagValue(diag.rowAudioCodec, lvl ? lvl.audioCodec || '–' : '–')
+              // Audio track info from the active audio group.
+              const audioTracks = playerHls.audioTracks
+              if (audioTracks && audioTracks.length) {
+                const at = audioTracks[playerHls.audioTrack] || audioTracks[0]
+                const lang = at.lang || ''
+                const name = at.name || ''
+                setDiagValue(
+                  diag.rowAudioTrack,
+                  [lang, name].filter(Boolean).join(' ') || 'Track ' + playerHls.audioTrack
+                )
+              }
+              setDiagValue(
+                diag.rowTarget,
+                d.targetduration ? d.targetduration.toFixed(1) + 's' : '–'
+              )
+              setDiagValue(diag.rowWindow, d.fragments ? String(d.fragments.length) : '–')
+              setDiagValue(
+                diag.rowTotalDur,
+                d.totalduration ? d.totalduration.toFixed(1) + 's' : '–'
+              )
+              if (playlistLoadStart) {
+                const playlistMs = Math.round(performance.now() - playlistLoadStart)
+                setDiagValue(
+                  diag.rowPlaylistLoad,
+                  playlistMs + 'ms',
+                  playlistMs > 1000 ? 'bad' : playlistMs > 400 ? 'warn' : ''
+                )
+              }
+            })
+
+            // Per-segment download/parse/buffer timing from the last loaded fragment.
+            playerHls.on(Hls.Events.FRAG_LOADED, (e, data) => {
+              diag.fragCount++
+              setDiagValue(diag.rowFragCount, String(diag.fragCount))
+              const stats = data.frag && data.frag.stats
+              if (!stats || !stats.loading) return
+              const loadMs = stats.loading.end - stats.loading.start
+              const parseMs = stats.parsing ? stats.parsing.end - stats.parsing.start : 0
+              const bufferMs = stats.buffering ? stats.buffering.end - stats.buffering.start : 0
+              const bytes = stats.total || stats.loaded || 0
+              const kbps = loadMs > 0 ? ((bytes * 8) / loadMs).toFixed(0) : '–'
+
+              setDiagValue(
+                diag.rowFragLoad,
+                loadMs.toFixed(0) + 'ms',
+                loadMs > 2000 ? 'bad' : loadMs > 800 ? 'warn' : ''
+              )
+              setDiagValue(diag.rowFragParse, parseMs ? parseMs.toFixed(0) + 'ms' : '–')
+              setDiagValue(diag.rowFragBuffer, bufferMs ? bufferMs.toFixed(0) + 'ms' : '–')
+              setDiagValue(diag.rowFragThroughput, kbps !== '–' ? kbps + ' kbps' : '–')
+              const retries = stats.retry || 0
+              setDiagValue(
+                diag.rowFragRetries,
+                String(retries),
+                retries > 2 ? 'bad' : retries > 0 ? 'warn' : ''
+              )
+            })
+
+            // Track FPS drops detected by hls.js's internal frame-drop monitor.
+            playerHls.on(Hls.Events.FPS_DROP, (e, data) => {
+              diag.fpsDropCount++
+              setDiagValue(
+                diag.rowFpsDrops,
+                String(diag.fpsDropCount),
+                diag.fpsDropCount > 10 ? 'bad' : diag.fpsDropCount > 3 ? 'warn' : ''
+              )
+            })
+
+            // Log every error (fatal and non-fatal) into the per-tile diagnostics panel,
+            // and keep the visible error badge behavior for fatal errors only.
+            // Also track buffer-stall recovery attempts separately.
+            playerHls.on(Hls.Events.ERROR, (event, data) => {
+              const isFatal = !!data.fatal
+              if (isFatal) {
+                dot.classList.add('err')
+                dot.classList.remove('ok')
+                errBox.style.display = 'block'
+                errBox.textContent = `${data.type}: ${data.details}`
+                diag.errorCount.fatal++
+              } else {
+                diag.errorCount.warn++
+              }
+              // Count buffer-stall recoveries (hls.js recovers from these automatically).
+              if (data.details === 'bufferStalledError') {
+                diag.stallCount++
+                setDiagValue(
+                  diag.rowStallsRecovered,
+                  String(diag.stallCount),
+                  diag.stallCount > 5 ? 'bad' : diag.stallCount > 2 ? 'warn' : ''
+                )
+              }
+              diag.diagErrTitle.textContent = `Errors (${diag.errorCount.fatal} fatal, ${diag.errorCount.warn} warn)`
+
+              const entry = document.createElement('div')
+              entry.className = 'diag-log-entry' + (isFatal ? ' fatal' : ' warn')
+              const ts = new Date().toLocaleTimeString()
+              entry.textContent = `[${ts}] ${isFatal ? 'FATAL' : 'warn'} ${data.type}/${data.details}`
+              entry.title = entry.textContent
+              diag.diagLog.insertBefore(entry, diag.diagLog.firstChild)
+              // Cap the log to the most recent 30 entries to avoid unbounded growth.
+              while (diag.diagLog.children.length > 30) {
+                diag.diagLog.removeChild(diag.diagLog.lastChild)
+              }
+            })
+          })
+
+          probe.destroy()
+        })
+
+        probe.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            let msg = `Failed to load manifest (${data.type}: ${data.details}).`
+            if (data.details === 'manifestLoadError' || data.details === 'manifestLoadTimeOut') {
+              msg +=
+                ' This is often a CORS restriction — the server may not allow playback from this origin. Try serving this page from an allowed domain, or check the browser console / Network tab for the exact CORS error.'
+            }
+            showGlobalError(msg)
+            probe.destroy()
+          }
+        })
+
+        probe.loadSource(url)
+        probe.attachMedia(probeVideo)
+      }
+
+      document.getElementById('loadBtn').addEventListener('click', () => {
+        const url = document.getElementById('manifestUrl').value.trim()
+        if (!url) return
+        setUrlParam(url)
+        loadManifest(url)
+      })
+
+      document.getElementById('manifestUrl').addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          document.getElementById('loadBtn').click()
+        }
+      })
+
+      document.getElementById('syncBtn').addEventListener('click', () => {
+        const videos = grid.querySelectorAll('video')
+        if (!videos.length) return
+        const ref = videos[0].currentTime
+        videos.forEach(v => {
+          v.currentTime = ref
+          v.play().catch(() => {})
+        })
+      })
+
+      pauseBtn.addEventListener('click', () => {
+        const videos = grid.querySelectorAll('video')
+        if (!videos.length) return
+        allPaused = !allPaused
+        if (allPaused) {
+          videos.forEach(v => v.pause())
+          pauseBtn.textContent = 'Resume all'
+        } else {
+          videos.forEach(v => v.play().catch(() => {}))
+          pauseBtn.textContent = 'Pause all'
+        }
+      })
+
+      muteAllChk.addEventListener('change', () => {
+        grid.querySelectorAll('video').forEach(v => (v.muted = muteAllChk.checked))
+      })
+
+      function parseTimecode(str) {
+        const parts = str
+          .trim()
+          .split(':')
+          .map(p => p.trim())
+        if (!parts.length || parts.some(p => p === '' || isNaN(p))) return null
+        let secs = 0
+        if (parts.length === 3) {
+          secs = +parts[0] * 3600 + +parts[1] * 60 + +parts[2]
+        } else if (parts.length === 2) {
+          secs = +parts[0] * 60 + +parts[1]
+        } else if (parts.length === 1) {
+          secs = +parts[0]
+        } else {
+          return null
+        }
+        return isNaN(secs) ? null : secs
+      }
+
+      // Force a seek to targetTime, even if it's outside what's currently
+      // buffered — the browser will fetch/decode the needed segments and
+      // briefly show a buffering state rather than refusing the seek.
+      // Respects the current global pause state: if we're paused, stay paused
+      // after seeking instead of forcing playback to resume.
+      function forceSeek(video, targetTime) {
+        video.currentTime = targetTime
+        if (!allPaused) {
+          video.play().catch(() => {})
+        }
+      }
+
+      const seekStatus = document.getElementById('seekStatus')
+      function setSeekStatus(msg, isErr) {
+        seekStatus.textContent = msg
+        seekStatus.style.color = isErr ? 'var(--err)' : 'var(--muted)'
+      }
+
+      document.getElementById('seekTimecodeBtn').addEventListener('click', () => {
+        const raw = document.getElementById('seekTimecode').value
+        const secs = parseTimecode(raw)
+        if (secs === null) {
+          setSeekStatus('Enter a valid MM:SS or HH:MM:SS', true)
+          return
+        }
+        const videos = grid.querySelectorAll('video')
+        if (!videos.length) {
+          setSeekStatus('No streams loaded', true)
+          return
+        }
+        videos.forEach(v => forceSeek(v, secs))
+        setSeekStatus(`Seeking all tiles to ${raw}… (buffering)`, false)
+      })
+
+      document.getElementById('seekSegmentBtn').addEventListener('click', () => {
+        const raw = document.getElementById('seekSegment').value.trim()
+        const sn = parseInt(raw, 10)
+        if (isNaN(sn)) {
+          setSeekStatus('Enter a valid segment number', true)
+          return
+        }
+        if (!hlsInstances.length) {
+          setSeekStatus('No streams loaded', true)
+          return
+        }
+        const videos = grid.querySelectorAll('video')
+        let foundCount = 0
+        let missedCount = 0
+        hlsInstances.forEach((h, idx) => {
+          const level = h.levels && h.levels[h.currentLevel]
+          const frags = level && level.details && level.details.fragments
+          if (!frags || !frags.length) {
+            missedCount++
+            return
+          }
+          const frag = frags.find(f => f.sn === sn)
+          if (!frag) {
+            missedCount++
+            return
+          }
+          const video = videos[idx]
+          if (!video) {
+            missedCount++
+            return
+          }
+          forceSeek(video, frag.start)
+          foundCount++
+        })
+        if (foundCount === 0) {
+          setSeekStatus(`Segment #${sn} not found in any tile's current playlist window`, true)
+        } else if (missedCount > 0) {
+          setSeekStatus(
+            `Seeking #${sn} on ${foundCount} tile(s)… not found on ${missedCount}`,
+            true
+          )
+        } else {
+          setSeekStatus(`Seeking all tiles to segment #${sn}… (buffering)`, false)
+        }
+      })
+
+      // Auto-load from ?url= param, or fall back to the input's default value.
+      window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(location.search)
+        const paramUrl = params.get('url')
+        const input = document.getElementById('manifestUrl')
+        if (paramUrl) {
+          input.value = paramUrl
+        }
+        const url = input.value.trim()
+        if (url) {
+          setUrlParam(url)
+          loadManifest(url)
+        }
+      })
+
+      // Periodically check whether all tiles are on the same segment sequence number
+      setInterval(() => {
+        const nums = currentSeqNums.filter(n => typeof n === 'number')
+        if (nums.length < 2) {
+          syncStatus.textContent = ''
+          return
+        }
+        const min = Math.min(...nums)
+        const max = Math.max(...nums)
+        if (min === max) {
+          syncStatus.textContent = `in sync (#${min})`
+          syncStatus.style.color = 'var(--ok)'
+        } else {
+          syncStatus.textContent = `drift: #${min}–#${max}`
+          syncStatus.style.color = 'var(--err)'
+        }
+      }, 1000)
+
+      // Periodically poll each tile's dropped-frame count via the standard
+      // Video Playback Quality API (supported in Chromium/Firefox; Safari lacks it),
+      // along with latency, display resolution, and frame delay.
+      setInterval(() => {
+        tileVideosAndDiags.forEach(({ video, diag, hls }) => {
+          // Latency to live edge (hls.js computed property; shows 0 for VOD).
+          const lat = hls.latency
+          if (lat > 0) {
+            setDiagValue(
+              diag.rowLatency,
+              lat.toFixed(1) + 's',
+              lat > 30 ? 'bad' : lat > 15 ? 'warn' : ''
+            )
+          }
+
+          // EWMA bandwidth estimate (hls.js internal ABR estimate).
+          const bw = hls.bandwidthEstimate
+          if (!isNaN(bw) && bw > 0) {
+            setDiagValue(diag.rowBwEstimate, (bw / 1000000).toFixed(2) + ' Mbps')
+          }
+
+          // Actual rendered resolution from the video element.
+          const vw = video.videoWidth
+          const vh = video.videoHeight
+          setDiagValue(diag.rowDisplayRes, vw && vh ? `${vw}x${vh}` : '–')
+
+          if (typeof video.getVideoPlaybackQuality !== 'function') {
+            setDiagValue(diag.rowDroppedFrames, 'n/a')
+            setDiagValue(diag.rowFrameDelay, 'n/a')
+            return
+          }
+          const q = video.getVideoPlaybackQuality()
+          const dropped = q.droppedVideoFrames || 0
+          const total = q.totalVideoFrames || 0
+          const pct = total > 0 ? (dropped / total) * 100 : 0
+          setDiagValue(
+            diag.rowDroppedFrames,
+            `${dropped} / ${total} (${pct.toFixed(1)}%)`,
+            pct > 5 ? 'bad' : pct > 1 ? 'warn' : ''
+          )
+          // Accumulated frame presentation delay in seconds (Chromium only).
+          const delay = q.totalFrameDelay || 0
+          setDiagValue(
+            diag.rowFrameDelay,
+            delay.toFixed(1) + 's',
+            delay > 5 ? 'bad' : delay > 2 ? 'warn' : ''
+          )
+        })
+      }, 2000)
+
+      let diagAllExpanded = true
+      document.getElementById('diagToggleAllBtn').addEventListener('click', e => {
+        diagAllExpanded = !diagAllExpanded
+        document
+          .querySelectorAll('.diag-panel')
+          .forEach(p => p.classList.toggle('open', diagAllExpanded))
+        document.querySelectorAll('.diag-toggle').forEach(b => {
+          b.textContent = diagAllExpanded ? 'Diagnostics ▴' : 'Diagnostics ▾'
+        })
+        e.target.textContent = diagAllExpanded
+          ? 'Collapse all diagnostics'
+          : 'Expand all diagnostics'
+      })
+
+      // --- Keyboard shortcuts: Space = pause/resume all, Left/Right = skip all ---
+      const SKIP_SECONDS = 10
+
+      function isTypingTarget(el) {
+        if (!el) return false
+        const tag = el.tagName
+        return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable
+      }
+
+      window.addEventListener('keydown', e => {
+        if (isTypingTarget(document.activeElement)) return
+
+        if (e.code === 'Space') {
+          e.preventDefault()
+          pauseBtn.click()
+        } else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+          e.preventDefault()
+          const videos = grid.querySelectorAll('video')
+          if (!videos.length) return
+          const delta = e.code === 'ArrowRight' ? SKIP_SECONDS : -SKIP_SECONDS
+          videos.forEach(v => forceSeek(v, v.currentTime + delta))
+          setSeekStatus(`Skipped ${delta > 0 ? '+' : ''}${delta}s on all tiles… (buffering)`, false)
+        }
+      })
+    </script>
+  </body>
+</html>
