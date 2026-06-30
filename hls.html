@@ -338,11 +338,10 @@
         globalError.innerHTML = ''
       }
 
-      // Update the browser URL bar with ?url=… without percent-encoding
-      // forward slashes or colons, so the URL stays human-readable.
-      function setUrlParam(url) {
-        const encoded = encodeURIComponent(url).replace(/%2F/g, '/').replace(/%3A/g, ':')
-        history.replaceState(null, '', '?url=' + encoded)
+      // Persist the manifest URL in the hash fragment (#url=…) so it stays
+      // readable in all browsers (no percent-encoding like query strings get).
+      function setUrlHash(url) {
+        history.replaceState(null, '', location.pathname + '#url=' + url)
       }
 
       function destroyAll() {
@@ -864,7 +863,7 @@
       document.getElementById('loadBtn').addEventListener('click', () => {
         const url = document.getElementById('manifestUrl').value.trim()
         if (!url) return
-        setUrlParam(url)
+        setUrlHash(url)
         loadManifest(url)
       })
 
@@ -1001,17 +1000,25 @@
         }
       })
 
-      // Auto-load from ?url= param, or fall back to the input's default value.
+      // Auto-load from #url= (hash) or legacy ?url= (query param), then
+      // fall back to the input's default value.
       window.addEventListener('DOMContentLoaded', () => {
-        const params = new URLSearchParams(location.search)
-        const paramUrl = params.get('url')
         const input = document.getElementById('manifestUrl')
-        if (paramUrl) {
-          input.value = paramUrl
-        }
-        const url = input.value.trim()
+        // Check hash first (#url=…), then legacy query (?url=…).
+        let url =
+          (location.hash.match(/^#url=(.+)/) || [])[1] ||
+          new URLSearchParams(location.search).get('url')
         if (url) {
-          setUrlParam(url)
+          // If loaded via the legacy ?url= format, convert to #url=.
+          if (location.search.includes('url=')) {
+            history.replaceState(null, '', location.pathname + '#url=' + url)
+          }
+          input.value = url
+        } else {
+          url = input.value.trim()
+        }
+        if (url) {
+          setUrlHash(url)
           loadManifest(url)
         }
       })
